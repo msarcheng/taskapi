@@ -1,59 +1,83 @@
 <?php
 
-class Response
+class Responses
 {
     /**
      * Variables for our API
      *  never cache tokens and other important stuff
      */
-    private $_success;
-    private $_httpStatusCode;
-    private $_messages = [];
+    private bool $_success;
+    private int $_httpStatusCode;
+    private array $_messages = [];
     private $_data;
-    private $_toCache = false; //For caching
-    private $_responseData = [];
+    private bool $_toCache = false; //For caching
+    private array $_responseData = [];
 
     /**
-     * Set success
+     * Set success code
      *
-     * @param string $success
+     * @param boolean $success
      */
-    public function setSuccess($success)
+    public function setSuccess(bool $success)
     {
         $this->_success = $success;
         return $this;
     }
 
-    public function setHttpStatusCode($httpStatusCode)
+    /**
+     * Set Http status code
+     *
+     * @param integer $httpStatusCode
+     */
+    public function setHttpStatusCode(int $httpStatusCode)
     {
         $this->_httpStatusCode = $httpStatusCode;
         return $this;
     }
 
-    public function addMessage($message)
+    /**
+     * Add message for http response code 500
+     *
+     * @param string $message
+     */
+    public function addMessage(string $message)
     {
         $this->_messages[] = $message;
         return $this;
     }
 
-    public function setData($data)
+    /**
+     * Set data to be returned
+     *
+     * @param mixed $data
+     */
+    public function setData(mixed $data): mixed
     {
         $this->_data = $data;
         return $this;
     }
 
+    /**
+     * Cache data
+     *
+     * @param bool $toCache
+     */
     public function toCache($toCache)
     {
         $this->_toCache = $toCache;
         return $this;
     }
 
+    /**
+     * Send method to get data from database
+     * Cache client 60 seconds, else no-cache
+     */
     public function send()
     {
         header('Content-Type: application/json;charset=utf-8');
 
         if ($this->_toCache) {
-            header('Cache-control: max-age=60'); //Cache the client max 60sec
+            header('Cache-control: max-age=60');
         } else {
             header('Cache-control: no-cache; no-store');
         }
