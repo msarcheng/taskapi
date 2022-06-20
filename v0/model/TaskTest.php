@@ -7,7 +7,7 @@ try {
         1,
         "Title here",
         "Description",
-        "01/01/2020 12:00",
+        "01/01/2020 12:00:00",
         "N"
     );
     header('Content-type: application/json;charset=utf8');

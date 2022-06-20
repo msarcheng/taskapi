@@ -49,9 +49,9 @@ class Responses
     /**
      * Set data to be returned
      *
-     * @param mixed $data
+     * @param $data
      */
-    public function setData(mixed $data): mixed
+    public function setData($data)
     {
         $this->_data = $data;
         return $this;
