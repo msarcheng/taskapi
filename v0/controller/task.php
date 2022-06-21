@@ -35,14 +35,19 @@ if (array_key_exists("taskid", $_GET)) {
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         try {
             $query = $readDB->prepare(
-                'SELECT id,
-                        title,
-                        description,
-                        DATE_FORMAT(deadline, "%d/%m/%Y %H:%i:%s") as deadline,
-                        completed
-                 FROM tbltasks
-                 WHERE id = :taskid
-                '
+                'SELECT
+                    id,
+                    title,
+                    description,
+                    DATE_FORMAT(
+                        deadline,
+                        "%d/%m/%Y %H:%i:%s"
+                    ) as deadline,
+                    completed
+                 FROM
+                    tbltasks
+                 WHERE
+                 id = :taskid'
             );
             $query->bindParam(':taskid', $taskid, PDO::PARAM_INT);
             $query->execute();
@@ -103,11 +108,11 @@ if (array_key_exists("taskid", $_GET)) {
 
     } elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
         try {
-            $query = $writeDB->prepare('
-                DELETE
-                FROM tbltasks
-                WHERE id = :taskid
-            ');
+            $query = $writeDB->prepare(
+                'DELETE
+                 FROM tbltasks
+                 WHERE id = :taskid'
+            );
             $query->bindParam(':taskid', $taskid, PDO::PARAM_INT);
             $query->execute();
 
@@ -151,4 +156,100 @@ if (array_key_exists("taskid", $_GET)) {
         exit;
     }
 
+} elseif (array_key_exists("completed", $_GET)) {
+
+    /**
+     * route : /v0/tasks/complete       : v0/task.php?completed=Y
+     *         /v0/tasks/incomplete     : v0/task.php?completed=N
+     */
+    $completed = $_GET['completed'];
+
+    /**
+     * completed must be Y or N
+     */
+    if (
+        $completed !== 'Y'
+        && $completed !== 'N'
+    ) {
+        $response = new Responses();
+        $response->setHttpStatusCode(400)
+            ->setSuccess(false)
+            ->addMessage("Completed fitler must be Y or N")
+            ->send();
+        exit;
+    }
+
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        try {
+            $query = $readDB->prepare(
+                'SELECT
+                    id,
+                    title,
+                    description,
+                    DATE_FORMAT(
+                        deadline,
+                        "%d/%m/%Y %H:%i:%s"
+                    ) AS deadline,
+                    completed
+                FROM
+                    tbltasks
+                WHERE
+                    completed = :completed'
+            );
+            $query->bindParam(':completed', $completed, PDO::PARAM_STR);
+            $query->execute();
+
+            $rowCount = $query->rowCount();
+
+            $taksArray = [];
+
+            while ($row = $query->fetch(PDO::FETCH_ASSOC)) {
+                $task = new Task(
+                    $row['id'],
+                    $row['title'],
+                    $row['description'],
+                    $row['deadline'],
+                    $row['completed']
+                );
+                $taskArray[] = $task->returnTaskAsArray();
+            }
+            $returnData = [];
+            $returnData['rows_returned'] = $rowCount;
+            $returnData['tasks'] = $taskArray;
+
+            //Response
+            $response = new Responses();
+            $response->setHttpStatusCode(200)
+                ->setSuccess(true)
+                ->toCache(true)
+                ->setData($returnData)
+                ->send();
+            exit;
+
+        } catch (PDOException $pe) {
+            error_log("Database query error - ". $pe, 0 );
+            $response = new Responses();
+            $response->setHttpStatusCode(500)
+                ->setSuccess(false)
+                ->addMessage("Failed to get tasks")
+                ->send();
+            exit;
+
+        } catch (TaskException $te) {
+            $response = new Responses();
+            $response->setHttpStatusCode(500)
+                ->setSuccess(false)
+                ->addMessage($te->getMessage())
+                ->send();
+            exit;
+        }
+
+    } else {
+        $response = new Responses();
+        $response->setHttpStatusCode(405)
+            ->setSuccess(false)
+            ->addMessage("Request method not allowed")
+            ->send();
+        exit;
+    }
 }
