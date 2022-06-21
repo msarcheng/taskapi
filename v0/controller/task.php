@@ -9,8 +9,8 @@ try {
     $writeDB = DB::connectWriteDb();
     $readDB = DB::connectReadDb();
 
-} catch (PDOException $e) {
-    error_log("Connection error - ".$ex, 0);
+} catch (PDOException $px) {
+    error_log("Connection error - ".$px, 0);
     $response = new Responses();
     $response->setHttpStatusCode(500)
         ->setSuccess(false)
@@ -32,6 +32,7 @@ if (array_key_exists("taskid", $_GET)) {
         exit;
     }
 
+    //Get single task
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         try {
             $query = $readDB->prepare(
@@ -107,6 +108,7 @@ if (array_key_exists("taskid", $_GET)) {
 
 
     } elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+        //Delete a task
         try {
             $query = $writeDB->prepare(
                 'DELETE
@@ -252,4 +254,92 @@ if (array_key_exists("taskid", $_GET)) {
             ->send();
         exit;
     }
+} elseif (empty($_GET)) {
+    //tasks
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        try {
+            $query = $readDB->prepare(
+                'SELECT
+                    id,
+                    title,
+                    description,
+                    DATE_FORMAT(
+                        deadline,
+                        "%d/%m/%Y %H:%i:%s"
+                    ) AS deadline,
+                    completed
+                 FROM
+                    tbltasks'
+            );
+            $query->execute();
+
+            $rowCount = $query->rowCount();
+
+            $taksArray = [];
+
+            while ($row = $query->fetch(PDO::FETCH_ASSOC)) {
+                $task = new Task(
+                    $row['id'],
+                    $row['title'],
+                    $row['description'],
+                    $row['deadline'],
+                    $row['completed']
+                );
+                $taskArray[] = $task->returnTaskAsArray();
+            }
+            $returnData = [];
+            $returnData['rows_returned'] = $rowCount;
+            $returnData['tasks'] = $taskArray;
+
+            //Response
+            $response = new Responses();
+            $response->setHttpStatusCode(200)
+                ->setSuccess(true)
+                ->toCache(true)
+                ->setData($returnData)
+                ->send();
+            exit;
+
+        } catch (PDOException $pe) {
+            error_log("Database query error - ".$pe, 0);
+            $response = new Responses();
+            $response->setHttpStatusCode(500)
+                ->setSuccess(false)
+                ->addMessage("Failed to get task")
+                ->send();
+            exit;
+
+        } catch (TaskException $te) {
+            $response = new Responses();
+            $response->setHttpStatusCode(500)
+                ->setSuccess(false)
+                ->addMessage($te->getMessage())
+                ->send();
+            exit;
+        }
+
+    } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    } else {
+        $response = new Responses();
+        $response->setHttpStatusCode(405)
+            ->setSuccess(false)
+            ->addMessage("Request method not allowed")
+            ->send();
+        exit;
+    }
+
+    try {
+        //code...
+    } catch (\Throwable $th) {
+        //throw $th;
+    }
+
+} else {
+    $response = new Responses();
+    $response->setHttpStatusCode(404)
+        ->setSuccess(false)
+        ->addMessage("Endpoint not found")
+        ->send();
+    exit;
 }
