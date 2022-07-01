@@ -194,7 +194,7 @@ if (array_key_exists("taskid", $_GET)) {
             }
 
             if (isset($jsonData->completed)) {
-                $completed_updated = true;
+                $completed = true;
                 $queryFields .= "completed = :completed, ";
             }
 
@@ -233,7 +233,7 @@ if (array_key_exists("taskid", $_GET)) {
             );
             $query->bindParam(':taskid', $taskid, PDO::PARAM_INT);
             $query->execute();
-            $rowCount = $query->rowCount();
+            $rowCount = $query->fetchColumn();
 
             if ($rowCount === 0){
                 $response = new Responses();
