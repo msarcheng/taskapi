@@ -115,6 +115,8 @@ if (array_key_exists("sessionid", $_GET)) {
             exit;
         }
 
+        $rtok = $jsonData->refresh_token ?? $jsonData->refresh_token = '';
+
         if (
             !isset($jsonData->refresh_token)
             || strlen($jsonData->refresh_token) < 1
@@ -122,8 +124,9 @@ if (array_key_exists("sessionid", $_GET)) {
             $response = new Responses();
             $response->setHttpStatusCode(400)
                 ->setSuccess(false);
-            (!isset($jsonData->refresh_token) ? $response->addMessage("Refresh token not supplied") : false);
-            (strlen($jsonData->refresh_token) < 1 ? $response->addMessage("Refresh token cannot be blank") : false);
+            (!isset($rtok) ? $response->addMessage("Refresh token not supplied") : false);
+            (empty($jsonData->refresh_token) ? $response->addMessage("Refresh token exists but empty") : false);
+            ((strlen($jsonData->refresh_token) < 1) ? $response->addMessage("Refresh token cannot be blank") : false);
             $response->send();
             exit;
         }
