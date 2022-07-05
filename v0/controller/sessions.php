@@ -279,7 +279,6 @@ if (array_key_exists("sessionid", $_GET)) {
             $response = new Responses();
             $response->setHttpStatusCode(500)
                 ->setSuccess(false)
-                ->addMessage($px)
                 ->addMessage("There was an issue refreshing access token - please log in again")
                 ->send();
             exit;

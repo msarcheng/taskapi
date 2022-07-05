@@ -8,9 +8,8 @@ try {
 
     $writeDB = DB::connectWriteDb();
     $readDB = DB::connectReadDb();
-
 } catch (PDOException $px) {
-    error_log("Connection error - ".$px, 0);
+    error_log("Connection error - " . $px, 0);
     $response = new Responses();
     $response->setHttpStatusCode(500)
         ->setSuccess(false)
@@ -18,6 +17,98 @@ try {
         ->send();
     exit;
 }
+
+/**
+ * Begin Auth Script
+ * get http token from header
+ */
+if (
+    !isset($_SERVER['HTTP_AUTHORIZATION'])
+    || strlen($_SERVER['HTTP_AUTHORIZATION']) < 1
+) {
+    $response = new Responses();
+    $response->setHttpStatusCode(401)
+        ->setSuccess(false);
+    (!isset($_SERVER['HTTP_AUTHORIZATION']) ? $response->addMessage("Access token missing from the header") : false);
+    (strlen($_SERVER['HTTP_AUTHORIZATION']) < 1 ? $response->addMessage("Access token cannot be blank") : false);
+    $response->send();
+    exit;
+}
+
+$accessTokenAuth = $_SERVER['HTTP_AUTHORIZATION'];
+
+try {
+    $query = $writeDB->prepare(
+        'SELECT a.userid AS userid,
+                a.accesstokenexpiry AS accesstokenexpiry,
+                b.useractive AS useractive,
+                b.loginattempts AS loginattempts
+         FROM tblsessions a
+         INNER JOIN tblusers b
+            ON a.userid = b.id
+         WHERE a.accesstoken = :accesstoken'
+    );
+    $query->bindParam(':accesstoken', $accessToken, PDO::PARAM_STR);
+    $query->execute();
+
+    $rowCount = $query->rowCount();
+
+    if ($rowCount === 0) {
+        $response = new Responses();
+        $response->setHttpStatusCode(401)
+            ->setSuccess(false)
+            ->addMessage("Invalid Access Token")
+            ->send();
+        exit;
+    }
+
+    $row = $query->fetch(PDO::FETCH_ASSOC);
+
+    $returned_userid = $row['userid'];
+    $returned_accesstokenexpiry = $row['accesstokenexpiry'];
+    $returned_useractive = $row['useractive'];
+    $returned_loginattempts = $row['loginattempts'];
+
+    //Check if user is still active
+    if ($returned_useractive !== 'Y') {
+        $response = new Responses();
+        $response->setHttpStatusCode(401)
+            ->setSuccess(false)
+            ->addMessage("User account not active")
+            ->send();
+        exit;
+    }
+
+    //Check if user has been locked out
+    if ($returned_loginattempts >= 3) {
+        $response = new Responses();
+        $response->setHttpStatusCode(401)
+            ->setSuccess(false)
+            ->addMessage("User account is currently locked out")
+            ->send();
+        exit;
+    }
+
+    //Check if expiry time of refreshtoken is less than database time
+    if (strtotime($returned_accesstokenexpiry) < time()) {
+        $response = new Responses();
+        $response->setHttpStatusCode(401)
+            ->setSuccess(false)
+            ->addMessage("Access token expired")
+            ->send();
+        exit;
+    }
+
+} catch (PDOException $px) {
+    $response = new Responses();
+    $response->setHttpStatusCode(500)
+        ->setSuccess(false)
+        ->addMessage("There was an issue authenticating - please try again")
+        ->send();
+    exit;
+}
+
+//  End of Auth script
 
 if (array_key_exists("taskid", $_GET)) {
 
@@ -48,13 +139,16 @@ if (array_key_exists("taskid", $_GET)) {
                  FROM
                     tbltasks
                  WHERE
-                 id = :taskid'
+                    id = :taskid
+                 AND
+                    userid = :userid'
             );
             $query->bindParam(':taskid', $taskid, PDO::PARAM_INT);
+            $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
             $rowCount = $query->rowCount();
 
-            if ($rowCount === 0){
+            if ($rowCount === 0) {
                 $response = new Responses();
                 $response->setHttpStatusCode(404)
                     ->setSuccess(false)
@@ -86,17 +180,14 @@ if (array_key_exists("taskid", $_GET)) {
                 ->setData($returnData)
                 ->send();
             exit;
-
-
         } catch (PDOException $e) {
-            error_log("Database error - ".$e, 0);
+            error_log("Database error - " . $e, 0);
             $response = new Responses();
             $response->setHttpStatusCode(500)
                 ->setSuccess(false)
                 ->addMessage("Failed to get task.")
                 ->send();
             exit;
-
         } catch (TaskException $te) {
             $response = new Responses();
             $response->setHttpStatusCode(500)
@@ -105,17 +196,17 @@ if (array_key_exists("taskid", $_GET)) {
                 ->send();
             exit;
         }
-
-
     } elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
         //Delete a task
         try {
             $query = $writeDB->prepare(
                 'DELETE
                  FROM tbltasks
-                 WHERE id = :taskid'
+                 WHERE id = :taskid
+                 AND userid = :userid'
             );
             $query->bindParam(':taskid', $taskid, PDO::PARAM_INT);
+            $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
 
             $rowCount = $query->rowCount();
@@ -136,9 +227,8 @@ if (array_key_exists("taskid", $_GET)) {
                 ->addMessage("Task deleted.")
                 ->send();
             exit;
-
         } catch (PDOException $pe) {
-            error_log("Database error - ".$e, 0);
+            error_log("Database error - " . $e, 0);
             $response = new Responses();
             $response->setHttpStatusCode(500)
                 ->setSuccess(false)
@@ -146,7 +236,6 @@ if (array_key_exists("taskid", $_GET)) {
                 ->send();
             exit;
         }
-
     } elseif ($_SERVER['REQUEST_METHOD'] === 'PATCH') {
         try {
 
@@ -229,13 +318,16 @@ if (array_key_exists("taskid", $_GET)) {
                  FROM
                     tbltasks
                  WHERE
-                    id = :taskid'
+                    id = :taskid
+                 AND
+                    userid = :userid'
             );
             $query->bindParam(':taskid', $taskid, PDO::PARAM_INT);
+            $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
             $rowCount = $query->fetchColumn();
 
-            if ($rowCount === 0){
+            if ($rowCount === 0) {
                 $response = new Responses();
                 $response->setHttpStatusCode(404)
                     ->setSuccess(false)
@@ -254,7 +346,7 @@ if (array_key_exists("taskid", $_GET)) {
                 );
             }
 
-            $queryString = "UPDATE tbltasks SET " . $queryFields . " WHERE id = :taskid";
+            $queryString = "UPDATE tbltasks SET " . $queryFields . " WHERE id = :taskid AND userid = :userid";
             $query = $writeDB->prepare($queryString);
 
             if ($title_updated === true) {
@@ -282,11 +374,12 @@ if (array_key_exists("taskid", $_GET)) {
             }
 
             $query->bindParam(':taskid', $taskid, PDO::PARAM_INT);
+            $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
 
             $rowCount = $query->rowCount();
 
-            if ($rowCount === 0){
+            if ($rowCount === 0) {
                 $response = new Responses();
                 $response->setHttpStatusCode(400)
                     ->setSuccess(false)
@@ -308,13 +401,16 @@ if (array_key_exists("taskid", $_GET)) {
                  FROM
                     tbltasks
                  WHERE
-                    id = :taskid'
+                    id = :taskid
+                 AND
+                    userid = :userid'
             );
             $query->bindParam(':taskid', $taskid, PDO::PARAM_INT);
+            $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
             $rowCount = $query->rowCount();
 
-            if ($rowCount === 0){
+            if ($rowCount === 0) {
                 $response = new Responses();
                 $response->setHttpStatusCode(404)
                     ->setSuccess(false)
@@ -348,16 +444,14 @@ if (array_key_exists("taskid", $_GET)) {
                 ->setData($returnData)
                 ->send();
             exit;
-
         } catch (PDOException $e) {
-            error_log("Database error - ".$e, 0);
+            error_log("Database error - " . $e, 0);
             $response = new Responses();
             $response->setHttpStatusCode(500)
                 ->setSuccess(false)
-                ->addMessage("Failed to update task.".$e)
+                ->addMessage("Failed to update task." . $e)
                 ->send();
             exit;
-
         } catch (TaskException $te) {
             $response = new Responses();
             $response->setHttpStatusCode(500)
@@ -366,7 +460,6 @@ if (array_key_exists("taskid", $_GET)) {
                 ->send();
             exit;
         }
-
     } else {
         $response = new Responses();
         $response->setHttpStatusCode(405)
@@ -375,7 +468,6 @@ if (array_key_exists("taskid", $_GET)) {
             ->send();
         exit;
     }
-
 } elseif (array_key_exists("completed", $_GET)) {
 
     /**
@@ -414,9 +506,12 @@ if (array_key_exists("taskid", $_GET)) {
                 FROM
                     tbltasks
                 WHERE
-                    completed = :completed'
+                    completed = :completed
+                AND
+                    userid = :userid'
             );
             $query->bindParam(':completed', $completed, PDO::PARAM_STR);
+            $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
 
             $rowCount = $query->rowCount();
@@ -445,16 +540,14 @@ if (array_key_exists("taskid", $_GET)) {
                 ->setData($returnData)
                 ->send();
             exit;
-
         } catch (PDOException $pe) {
-            error_log("Database query error - ". $pe, 0 );
+            error_log("Database query error - " . $pe, 0);
             $response = new Responses();
             $response->setHttpStatusCode(500)
                 ->setSuccess(false)
                 ->addMessage("Failed to get tasks")
                 ->send();
             exit;
-
         } catch (TaskException $te) {
             $response = new Responses();
             $response->setHttpStatusCode(500)
@@ -463,7 +556,6 @@ if (array_key_exists("taskid", $_GET)) {
                 ->send();
             exit;
         }
-
     } else {
         $response = new Responses();
         $response->setHttpStatusCode(405)
@@ -472,7 +564,6 @@ if (array_key_exists("taskid", $_GET)) {
             ->send();
         exit;
     }
-
 } elseif (array_key_exists("page", $_GET)) {
     //Paginated output of task
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -495,14 +586,16 @@ if (array_key_exists("taskid", $_GET)) {
         try {
             $query = $readDB->prepare(
                 'SELECT COUNT(id) AS totalTasks
-                 FROM tbltasks'
+                 FROM tbltasks
+                 WHERE userid = :userid'
             );
+            $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
 
             $row = $query->fetch(PDO::FETCH_ASSOC);
             $taskCount = intval($row['totalTasks']);
 
-            $numOfPages = ceil($taskCount/$limitPerPage);
+            $numOfPages = ceil($taskCount / $limitPerPage);
 
             /**
              * We cannot display zero pages
@@ -543,9 +636,11 @@ if (array_key_exists("taskid", $_GET)) {
                         ) AS deadline,
                         completed
                  FROM tbltasks
+                 WHERE userid = :userid
                  LIMIT :pglimit
                  OFFSET :offsets'
             );
+            $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->bindParam(':pglimit', $limitPerPage, PDO::PARAM_INT);
             $query->bindParam(':offsets', $offset, PDO::PARAM_INT);
             $query->execute();
@@ -582,9 +677,8 @@ if (array_key_exists("taskid", $_GET)) {
                 ->setData($returnData)
                 ->send();
             exit;
-
         } catch (PDOException $pe) {
-            error_log("Database query error - ".$pe, 0);
+            error_log("Database query error - " . $pe, 0);
             $response = new Responses();
             $response->setHttpStatusCode(500)
                 ->setSuccess(false)
@@ -599,7 +693,6 @@ if (array_key_exists("taskid", $_GET)) {
                 ->send();
             exit;
         }
-
     } else {
         $response = new Responses();
         $response->setHttpStatusCode(405)
@@ -608,7 +701,6 @@ if (array_key_exists("taskid", $_GET)) {
             ->send();
         exit;
     }
-
 } elseif (empty($_GET)) {
     //tasks
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -624,8 +716,10 @@ if (array_key_exists("taskid", $_GET)) {
                     ) AS deadline,
                     completed
                  FROM
-                    tbltasks'
+                    tbltasks
+                 WHERE userid = :userid'
             );
+            $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
 
             $rowCount = $query->rowCount();
@@ -654,16 +748,14 @@ if (array_key_exists("taskid", $_GET)) {
                 ->setData($returnData)
                 ->send();
             exit;
-
         } catch (PDOException $pe) {
-            error_log("Database query error - ".$pe, 0);
+            error_log("Database query error - " . $pe, 0);
             $response = new Responses();
             $response->setHttpStatusCode(500)
                 ->setSuccess(false)
                 ->addMessage("Failed to get task")
                 ->send();
             exit;
-
         } catch (TaskException $te) {
             $response = new Responses();
             $response->setHttpStatusCode(500)
@@ -672,7 +764,6 @@ if (array_key_exists("taskid", $_GET)) {
                 ->send();
             exit;
         }
-
     } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             //Trigger error if wrong content
@@ -707,8 +798,8 @@ if (array_key_exists("taskid", $_GET)) {
                 $response = new Responses();
                 $response->setHttpStatusCode(400)
                     ->setSuccess(false);
-                    (!isset($jsonData->title) ? $response->addMessage("Title field is mandatory and must be provided") : false);
-                    (!isset($jsonData->completed) ? $response->addMessage("Completed field is mandatory and must be provided") : false);
+                (!isset($jsonData->title) ? $response->addMessage("Title field is mandatory and must be provided") : false);
+                (!isset($jsonData->completed) ? $response->addMessage("Completed field is mandatory and must be provided") : false);
                 $response->send();
                 exit;
             }
@@ -732,17 +823,21 @@ if (array_key_exists("taskid", $_GET)) {
                     (title,
                      description,
                      deadline,
-                     completed)
+                     completed,
+                     userid)
                  VALUES
                     (:title,
                     :description,
                     STR_TO_DATE(:deadline, \'%d/%m/%Y %H:%i:%s\'),
-                    :completed)
-            ');
+                    :completed,
+                    :userid)
+            '
+            );
             $query->bindParam(':title', $title, PDO::PARAM_STR);
             $query->bindParam(':description', $description, PDO::PARAM_STR);
             $query->bindParam(':deadline', $deadline, PDO::PARAM_STR);
             $query->bindParam(':completed', $completed, PDO::PARAM_STR);
+            $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
 
             //Make sure it is successfull
@@ -773,9 +868,11 @@ if (array_key_exists("taskid", $_GET)) {
                         ) AS deadline,
                         completed
                 FROM tbltasks
-                WHERE id = :taskid'
+                WHERE id = :taskid
+                AND userid =:userid'
             );
             $query->bindParam(':taskid', $lastTaskId, PDO::PARAM_INT);
+            $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
 
             $taskRowCount = $query->rowCount();
@@ -813,7 +910,6 @@ if (array_key_exists("taskid", $_GET)) {
                 ->setData($returnData)
                 ->send();
             exit;
-
         } catch (TaskException $te) {
             $response = new Responses();
             $response->setHttpStatusCode(400)
@@ -821,9 +917,8 @@ if (array_key_exists("taskid", $_GET)) {
                 ->addMessage($te->getMessage())
                 ->send();
             exit;
-
         } catch (PDOException $pe) {
-            error_log("Database query error - ".$pe, 0);
+            error_log("Database query error - " . $pe, 0);
             $response = new Responses();
             $response->setHttpStatusCode(500)
                 ->setSuccess(false)
@@ -831,7 +926,6 @@ if (array_key_exists("taskid", $_GET)) {
                 ->send();
             exit;
         }
-
     } else {
         $response = new Responses();
         $response->setHttpStatusCode(405)
