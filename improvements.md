@@ -7,3 +7,4 @@
     Create a Helper Class that would validate conditions like string length etc.
     Create a 401 redirection whenever other files are accessed illegally
     SSL is important to be added - https
+    Usage of latest PHP syntax >= 7.4
