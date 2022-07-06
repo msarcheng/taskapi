@@ -4,7 +4,7 @@ Header Set Access-Control-Allow-Origin "*"
 # Enable Authorization in apache
 SetEnvIf Authorization .+ HTTP_AUTHORIZATION=$0
 
-Option -Indexes
+Options -Indexes
 
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f

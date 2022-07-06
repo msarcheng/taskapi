@@ -17,6 +17,18 @@ try {
     exit;
 }
 
+// handle options request method for CORS
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    header('Access-Control-Allow-Methods: POST, OPTIONS');
+    header('Access-Control-Allow-Headers: Content-Type');
+    header('Access-Control-Max-Age: 86400');
+    $response = new Responses();
+    $response->setHttpStatusCode(200)
+        ->setSuccess(true)
+        ->send();
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     $response = new Responses();
     $response->setHttpStatusCode(405)
