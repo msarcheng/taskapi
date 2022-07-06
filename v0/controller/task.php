@@ -5,7 +5,6 @@ require_once('../model/Task.php');
 require_once('../model/Response.php');
 
 try {
-
     $writeDB = DB::connectWriteDb();
     $readDB = DB::connectReadDb();
 } catch (PDOException $px) {
@@ -115,12 +114,23 @@ try {
 if (array_key_exists("taskid", $_GET)) {
 
     $taskid = $_GET['taskid'];
-
     if ($taskid === '' || !is_numeric($taskid)) {
         $response = new Responses();
         $response->setHttpStatusCode(400)
             ->setSuccess(false)
             ->addMessage("Task ID cannot be blank or must be numeric")
+            ->send();
+        exit;
+    }
+
+    //Handle options request method for CORS
+    if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+        header('Access-Control-Allow-Methods: GET, PATCH, DELETE, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type');
+        header('Access-Control-Max-Age: 86400');
+        $response = new Responses();
+        $response->setHttpStatusCode(200)
+            ->setSuccess(true)
             ->send();
         exit;
     }
