@@ -22,6 +22,7 @@ try {
  * Begin Auth Script
  * get http token from header
  */
+$httpAuth = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['HTTP_AUTHORIZATION'] = '';
 if (
     !isset($_SERVER['HTTP_AUTHORIZATION'])
     || strlen($_SERVER['HTTP_AUTHORIZATION']) < 1
@@ -29,7 +30,8 @@ if (
     $response = new Responses();
     $response->setHttpStatusCode(401)
         ->setSuccess(false);
-    (!isset($_SERVER['HTTP_AUTHORIZATION']) ? $response->addMessage("Access token missing from the header") : false);
+    (!isset($httpAuth) ? $response->addMessage("Access token missing from the header") : false);
+    (empty($httpAuth) ? $response->addMessage("Access token is in the header but not supplied") : false);
     (strlen($_SERVER['HTTP_AUTHORIZATION']) < 1 ? $response->addMessage("Access token cannot be blank") : false);
     $response->send();
     exit;
@@ -44,11 +46,11 @@ try {
                 b.useractive AS useractive,
                 b.loginattempts AS loginattempts
          FROM tblsessions a
-         INNER JOIN tblusers b
+         JOIN tblusers b
             ON a.userid = b.id
          WHERE a.accesstoken = :accesstoken'
     );
-    $query->bindParam(':accesstoken', $accessToken, PDO::PARAM_STR);
+    $query->bindParam(':accesstoken', $accessTokenAuth, PDO::PARAM_STR);
     $query->execute();
 
     $rowCount = $query->rowCount();
@@ -738,7 +740,7 @@ if (array_key_exists("taskid", $_GET)) {
             }
             $returnData = [];
             $returnData['rows_returned'] = $rowCount;
-            $returnData['tasks'] = $taskArray;
+            $returnData['tasks'] = $taskArray ?? [];
 
             //Response
             $response = new Responses();
