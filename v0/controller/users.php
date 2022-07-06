@@ -6,7 +6,6 @@ require_once('../model/Response.php');
 //DB
 try {
     $writeDB = DB::connectWriteDb();
-
 } catch (PDOException $px) {
     error_log("Connection error - " . $px, 0);
     $response = new Responses();
@@ -98,7 +97,6 @@ if (
 //Trim whitespace
 $fullname = trim($jsonData->fullname);
 $username = trim($jsonData->username);
-
 $password = $jsonData->password;
 
 try {
@@ -132,7 +130,6 @@ try {
     $query->bindParam(':fullname', $fullname, PDO::PARAM_STR);
     $query->bindParam(':username', $username, PDO::PARAM_STR);
     $query->bindParam(':password', $hash_password, PDO::PARAM_STR);
-
     $query->execute();
 
     $rowCount = $query->rowCount();
