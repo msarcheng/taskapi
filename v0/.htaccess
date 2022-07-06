@@ -1,5 +1,10 @@
+# CORS options
+Header Set Access-Control-Allow-Origin "*"
+
 # Enable Authorization in apache
 SetEnvIf Authorization .+ HTTP_AUTHORIZATION=$0
+
+Option -Indexes
 
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -15,6 +20,6 @@ RewriteRule tasks$ controller/task.php [L]
 # Users
 RewriteRule users$ controller/users.php [L]
 
-# Sessions
+# Authentication Sessions
 RewriteRule sessions/([0-9]+)$ controller/sessions.php?sessionid=$1 [L]
 RewriteRule sessions$ controller/sessions.php [L]

@@ -417,7 +417,7 @@ if (array_key_exists("sessionid", $_GET)) {
             exit;
         }
 
-        //Throw error if password unhashed dones not match
+        //Add 1 to loginattempt if login has failed
         if (!password_verify($password, $returned_password)) {
             $query = $writeDB->prepare(
                 'UPDATE tblusers
@@ -458,13 +458,13 @@ if (array_key_exists("sessionid", $_GET)) {
         try {
             $writeDB->beginTransaction(); //Start database transaction
 
-            $query = $writeDB->prepare(
+            $query1 = $writeDB->prepare(
                 'UPDATE tblusers
                  SET loginattempts = 0
                  WHERE id = :id'
             );
-            $query->bindParam(':id', $id, PDO::PARAM_STR);
-            $query->execute();
+            $query1->bindParam(':id', $id, PDO::PARAM_STR);
+            $query1->execute();
 
             //Insert to table sessions
             $query2 = $writeDB->prepare(
