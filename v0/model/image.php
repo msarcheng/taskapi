@@ -121,8 +121,8 @@ class Image {
     public function setMimeType(string $mimetype)
     {
         if (
-            strlen($$mimetype) < 1
-            || strlen($$mimetype) > 255
+            strlen($mimetype) < 1
+            || strlen($mimetype) > 255
         ) {
             throw new ImageException("Image mimetype error");
         }
@@ -137,10 +137,10 @@ class Image {
                 !is_numeric($taskid)
                 || $taskid <= 0
                 || $taskid > 9223372036854775807
-                || $this->_id !== null
+                || $this->_taskid !== null
             )
         ) {
-            throw new ImageException("Image TaskID Error");
+            throw new ImageException("Image Task ID Error");
         }
 
         $this->_taskid = $taskid;
@@ -154,6 +154,9 @@ class Image {
         $image['filename'] = $this->getFilename();
         $image['mimetype'] = $this->getMimeType();
         $image['taskid'] = $this->getTaskId();
+        $image['imageurl'] = $this->getImageURL();
+
+        return $image;
     }
 
 }
