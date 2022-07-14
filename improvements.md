@@ -8,3 +8,8 @@
     Create a 401 redirection whenever other files are accessed illegally
     SSL is important to be added - https
     Usage of latest PHP syntax >= 7.4
+    Ability to upload files
+
+    Apply PHPUnit
+    Apply Faker
+    Make a composer package
