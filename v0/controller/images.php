@@ -234,6 +234,57 @@ function uploadImageRoute(
     }
 }
 
+function getImageAttributesRoute($readDB, $taskid, $imageid, $returned_userid) {
+    try {
+        $query = $readDB->prepare(
+            'SELECT a.id AS id,
+                    a.title AS title,
+                    a.filename AS filename,
+                    a.mimetype AS mimetype,
+                    a.taskid AS taskid
+             FROM tblimages a
+             INNER JOIN tbltasks b
+                ON a.taskid = b.id
+             WHERE a.id = :imageid
+                AND b.id = :taskid
+                AND b.userid = :userid'
+        );
+
+        $query->bindParam(":imageid", $imageid, PDO::PARAM_INT);
+        $query->bindParam(":taskid", $taskid, PDO::PARAM_INT);
+        $query->bindParam(":userid", $returned_userid, PDO::PARAM_INT);
+
+        $query->execute();
+
+        $rowCount = $query->rowCount();
+
+        if ($rowCount === 0){
+            sendResponse(404, false, "Image not found");
+        }
+
+        $imageArray = [];
+        while($row = $query->fetch(PDO::FETCH_ASSOC)) {
+            $image = new Image(
+                $row['id'],
+                $row['title'],
+                $row['filename'],
+                $row['mimetype'],
+                $row['taskid']
+            );
+
+            $imageArray[] = $image->returnImageAsArray();
+        }
+
+        sendResponse(200, true, null, true, $imageArray);
+
+    } catch (PDOException $pe) {
+        error_log("Database query error:".$pe, 0);
+        sendResponse(500, false, "Failed to get image attributes");
+    } catch (ImageException $ie) {
+        sendResponse(500, false, $ie->getMessage());
+    }
+}
+
  function checkAuthStatusAndReturnUserId($writeDB) {
     /**
      * Begin Auth Script
@@ -355,6 +406,7 @@ function uploadImageRoute(
     }
 
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        getImageAttributesRoute($readDB, $taskid, $imageid, $returned_userid);
 
     } elseif ($_SERVER['REQUEST_METHOD'] === 'PATCH') {
 
