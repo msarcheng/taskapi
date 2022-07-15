@@ -285,6 +285,257 @@ function getImageAttributesRoute($readDB, $taskid, $imageid, $returned_userid) {
     }
 }
 
+function getImageRoute($readDB, $taskid, $imageid, $returned_userid) {
+    try {
+
+        $query = $readDB->prepare(
+            'SELECT a.id AS id,
+                    a.title AS title,
+                    a.filename AS filename,
+                    a.mimetype AS mimetype,
+                    a.taskid AS taskid
+             FROM tblimages a
+             INNER JOIN tbltasks b
+                ON a.taskid = b.id
+             WHERE a.id = :imageid
+             AND b.id = :taskid
+             AND b.userid = :userid'
+        );
+        $query->bindParam(":imageid", $imageid, PDO::PARAM_INT);
+        $query->bindParam(":taskid", $taskid, PDO::PARAM_INT);
+        $query->bindParam(":userid", $returned_userid, PDO::PARAM_INT);
+        $query->execute();
+
+        $rowCount = $query->rowCount();
+
+        if ($rowCount === 0) {
+            sendResponse(404, false, "Image not found");
+        }
+
+        $image = null;
+
+        while($row = $query->fetch(PDO::FETCH_ASSOC)) {
+            $image = new Image(
+                $row['id'],
+                $row['title'],
+                $row['filename'],
+                $row['mimetype'],
+                $row['taskid']
+            );
+        }
+
+        if ($image == null) {
+            sendResponse(500, false, "Image file not found");
+        }
+
+        $image->returnImageFile();
+
+
+    } catch (ImageException $ie) {
+        sendResponse(
+            500,
+            false,
+            $ie->getMessage()
+        );
+     } catch (PDOException $pe) {
+        error_log("Connection error".$pe, 0);
+        sendResponse(
+            500,
+            false,
+            "Database connection error"
+        );
+     }
+}
+
+function updateImageAttributesRoute($writeDB, $taskid, $imageid, $returned_userid) {
+    try {
+        if ($_SERVER['CONTENT_TYPE'] !== 'application/json') {
+            sendResponse(400, false, "Content type header not set to JSON");
+        }
+
+        $rawPatchData = file_get_contents('php://input');
+
+        if (!$jsonData = json_decode($rawPatchData)) {
+            sendResponse(400, false, "Request body is not valid JSON");
+        }
+
+        $title_updated = false;
+        $filename_updated = false;
+
+        $queryFields = "";
+
+        //tblimages - a
+        if (isset($jsonData->title)) {
+            $title_updated = true;
+            $queryFields .= "a.title = :title, ";
+        }
+
+        //Filename should not contain any dot or extensions.
+        if (isset($jsonData->filename)) {
+            if (strpos($jsonData->filename, ".") !== false) {
+                sendResponse(400, false, "Filename cannot contain any dots or file extensions");
+            }
+            $filename_updated = true;
+            $queryFields .= "a.filename = :filename, ";
+        }
+
+        //When applying query we need to remove the last comma in the end
+        $queryFields =rtrim($queryFields, ", ");
+
+        if ($title_updated === false && $filename_updated === false) {
+            sendResponse(400, false, "No image fields provided");
+        }
+
+        //Using transactions fro PDO again
+        $writeDB->beginTransaction();
+
+        $query = $writeDB->prepare(
+            'SELECT a.id AS id,
+                    a. title AS title,
+                    a.filename AS filename,
+                    a.mimetype AS mimetype,
+                    a.taskid AS taskid
+             FROM tblimages a
+             INNER JOIN tbltasks b
+                ON a.taskid = b.id
+             WHERE a.id = :imageid
+             AND a.taskid = :taskid
+             AND b.userid = :userid'
+        );
+        $query->bindParam(":imageid", $imageid, PDO::PARAM_INT);
+        $query->bindParam(":taskid", $taskid, PDO::PARAM_INT);
+        $query->bindParam(":userid", $returned_userid, PDO::PARAM_INT);
+        $query->execute();
+
+        $rowCount = $query->rowCount();
+
+        if ($rowCount === 0) {
+            if ($writeDB->inTransaction()) {
+                $writeDB->rollBack();
+            }
+            sendResponse(404, false, "No image found to update");
+        }
+
+        while($row = $query->fetch(PDO::FETCH_ASSOC)) {
+            $image = new Image(
+                $row['id'],
+                $row['title'],
+                $row['filename'],
+                $row['mimetype'],
+                $row['taskid']
+            );
+        }
+
+        $queryString = "UPDATE tblimages a
+                        INNER JOIN tbltasks b
+                            ON a.taskid = b.id
+                        SET " . $queryFields . "
+                        WHERE a.taskid = b.id
+                        AND a.id = :imageid
+                        AND a.taskid = :taskid
+                        AND b.userid = :userid";
+
+        $query = $writeDB->prepare($queryString);
+
+        //Change to $var === true only if does not function
+        if ($title_updated) {
+            $image->setTitle($jsonData->title);     //Set title for update
+            $up_title =$image->getTitle();          //Get the title for update
+            $query->bindParam(":title", $up_title, PDO::PARAM_STR);
+        }
+
+        //Change to $var === true only if does not function
+        if ($filename_updated) {
+            $originalFilename = $image->getFilename();
+
+            $image->setFilename($jsonData->filename . "." . $image->getFileExtension());     //Set filename for update
+
+            //Updated filename
+            $up_filename =$image->getFilename();
+            $query->bindParam(":filename", $up_filename, PDO::PARAM_STR);
+        }
+
+        $query->bindParam(":imageid", $imageid, PDO::PARAM_INT);
+        $query->bindParam(":taskid", $taskid, PDO::PARAM_INT);
+        $query->bindParam(":userid", $returned_userid, PDO::PARAM_INT);
+        $query->execute();
+
+        $rowCount = $query->rowCount();
+
+        if ($rowCount === 0) {
+            if ($writeDB->inTransaction()) {
+                $writeDB->rollBack();
+            }
+
+            sendResponse(400, false, "Image attributes not updated - the given values may be the same as the stored values");
+        }
+
+        $query = $writeDB->prepare(
+            'SELECT a.id AS id,
+                    a.title AS title,
+                    a.filename AS filename,
+                    a.mimetype AS mimetype,
+                    a.taskid AS taskid
+             FROM tblimages a
+             INNER JOIN tbltasks b
+                ON a.taskid = b.id
+             WHERE a.id = :imageid
+             AND b.id = :taskid
+             AND b.userid = :userid'
+        );
+        $query->bindParam(":imageid", $imageid, PDO::PARAM_INT);
+        $query->bindParam(":taskid", $taskid, PDO::PARAM_INT);
+        $query->bindParam(":userid", $returned_userid, PDO::PARAM_INT);
+        $query->execute();
+
+        $rowCount = $query->rowCount();
+
+        if ($rowCount === 0) {
+            if ($writeDB->inTransction()) {
+                $writeDB->rollBack();
+            }
+            sendResponse(404, false, "No Image Found");
+        }
+
+        //Put it back in model and store in JSON as response
+        $imageArray = [];
+
+        while($row = $query->fetch(PDO::FETCH_ASSOC)) {
+            $image = new Image(
+                $row['id'],
+                $row['title'],
+                $row['filename'],
+                $row['mimetype'],
+                $row['taskid']
+            );
+
+            $imageArray[] = $image->returnImageAsArray();
+        }
+
+        //Change to $var === true only if does not function
+        if ($filename_updated) {
+            $image->renameImageFile($originalFilename, $up_filename);
+        }
+
+        $writeDB->commit();
+
+        sendResponse(200, true, "Image attributes updated", false, $imageArray);
+
+    } catch (ImageException $ie) {
+        sendResponse(400, false, $ie->getMessage());
+
+     } catch (PDOException $pe) {
+        error_log("Connection error".$pe, 0);
+
+        //rollback
+        if ($writeDB->inTransaction()) {
+            $writeDB->rollBack();
+        }
+
+        sendResponse(500, false, $pe." -Failed to update image attributes -check your data for errors");
+     }
+}
+
  function checkAuthStatusAndReturnUserId($writeDB) {
     /**
      * Begin Auth Script
@@ -409,6 +660,7 @@ function getImageAttributesRoute($readDB, $taskid, $imageid, $returned_userid) {
         getImageAttributesRoute($readDB, $taskid, $imageid, $returned_userid);
 
     } elseif ($_SERVER['REQUEST_METHOD'] === 'PATCH') {
+        updateImageAttributesRoute($writeDB, $taskid, $imageid, $returned_userid);
 
     } else {
         sendResponse(
@@ -439,6 +691,7 @@ function getImageAttributesRoute($readDB, $taskid, $imageid, $returned_userid) {
     }
 
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        getImageRoute($readDB, $taskid, $imageid, $returned_userid);
 
     } elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
 

@@ -68,9 +68,28 @@ class Image {
     {
         $httpOrHttps = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http";
         $host = $_SERVER['HTTP_HOST'];
-        $url = "/v0/tasks/" . $this->getTaskId() . "/images/" . $this->getId();
+        $url = "/v0/tasks/" . $this->getTaskId() . '/images/' . $this->getId();
 
         return $httpOrHttps . "://" . $host . $url;
+    }
+
+    public function returnImageFile()
+    {
+        $filepath = $this->getUploadFolderLocation().$this->getTaskId().'/'. $this->getFilename();
+
+        if (!file_exists($filepath)) {
+            throw new ImageException("Image file not found");
+        }
+
+        header('Content-Type: '.$this->getMimeType());
+        header('Content-Disposition: inline; filename="' . $this->getFilename() . '"');
+
+        if (!readfile($filepath)) {
+            http_response_code(404);
+            exit;
+        }
+
+        exit;
     }
 
     /**
@@ -162,6 +181,21 @@ class Image {
 
         if (!move_uploaded_file($tempFileName, $uploadedFilePath)) {
             throw new ImageException("Failed to upload image file");
+        }
+    }
+
+    public function renameImageFile($oldFileName, $newFileName)
+    {
+        $originalFilePath = $this->getUploadFolderLocation() . $this->getTaskId() . "/" . $oldFileName;
+        $renamedFilePath = $this->getUploadFolderLocation() . $this->getTaskId() . "/" . $newFileName;
+
+        //Lets check if the original file exists to be renamed
+        if (!file_exists($originalFilePath)) {
+            throw new ImageException("Cannot find file to rename");
+        }
+
+        if (!rename($originalFilePath, $renamedFilePath)) {
+            throw new ImageException("Failed to update the filename");
         }
     }
 
