@@ -536,6 +536,94 @@ function updateImageAttributesRoute($writeDB, $taskid, $imageid, $returned_useri
      }
 }
 
+function deleteImageRoute($writeDB, $taskid, $imageid, $returned_userid) {
+    try {
+        $writeDB->beginTransaction();
+
+        $query = $writeDB->prepare(
+            'SELECT a.id AS id,
+                    a.title AS title,
+                    a.filename AS filename,
+                    a.mimetype AS mimetype,
+                    a.taskid AS taskid
+             FROM tblimages a
+             INNER JOIN tbltasks b
+                ON a.taskid = b.id
+             WHERE a.id = :imageid
+             AND b.id = :taskid
+             AND b.userid = :userid'
+        );
+        $query->bindParam(":imageid", $imageid, PDO::PARAM_INT);
+        $query->bindParam(":taskid", $taskid, PDO::PARAM_INT);
+        $query->bindParam(":userid", $returned_userid, PDO::PARAM_INT);
+        $query->execute();
+
+        $rowCount = $query->rowCount();
+
+        if ($rowCount === 0) {
+            if ($writeDB->inTransction()) {
+                $writeDB->rollBack();
+            }
+            sendResponse(404, false, "No Image Found");
+        }
+
+        $image = null;
+        while($row = $query->fetch(PDO::FETCH_ASSOC)) {
+            $image = new Image(
+                $row['id'],
+                $row['title'],
+                $row['filename'],
+                $row['mimetype'],
+                $row['taskid']
+            );
+        }
+
+        if ($image == null) {
+            $writeDB->rollBack();
+            sendResponse(500, false, "Failed to get Image");
+        }
+
+        $query = $writeDB->prepare(
+            'DELETE tblimages
+             FROM tblimages
+             INNER JOIN tbltasks
+                ON tblimages.taskid = tbltasks.id
+             WHERE tblimages.id = :imageid
+             AND tbltasks.id = :taskid
+             AND tbltasks.userid = :userid'
+        );
+
+        $query->bindParam(":imageid", $imageid, PDO::PARAM_INT);
+        $query->bindParam(":taskid", $taskid, PDO::PARAM_INT);
+        $query->bindParam(":userid", $returned_userid, PDO::PARAM_INT);
+        $query->execute();
+
+        $rowCount = $query->rowCount();
+
+        if ($rowCount === 0) {
+            $writeDB->rollBack();
+            sendResponse(404, false, "Image not found");
+        }
+
+        $image->deleteImageFile();
+
+        $writeDB->commit();
+
+        sendResponse(200, true, "Image deleted");
+
+    } catch (ImageException $ie) {
+        sendResponse(400, false, $ie->getMessage());
+
+    } catch (PDOException $pe) {
+        error_log("Connection error".$pe, 0);
+
+        //rollback
+        $writeDB->rollBack();
+
+        sendResponse(500, false, $pe." -Failed to update image attributes -check your data for errors");
+     }
+}
+
  function checkAuthStatusAndReturnUserId($writeDB) {
     /**
      * Begin Auth Script
@@ -694,6 +782,7 @@ function updateImageAttributesRoute($writeDB, $taskid, $imageid, $returned_useri
         getImageRoute($readDB, $taskid, $imageid, $returned_userid);
 
     } elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+        deleteImageRoute($writeDB, $taskid, $imageid, $returned_userid);
 
     } else {
         sendResponse(405, false, "Request method not allowed");
