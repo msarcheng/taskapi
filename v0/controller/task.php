@@ -3,6 +3,43 @@
 require_once('db.php');
 require_once('../model/Task.php');
 require_once('../model/Response.php');
+require_once('../model/image.php');
+
+function retrieveTaskImages(
+    $dbConn,
+    $taskid,
+    $returned_userid
+) {
+    $imageQuery = $dbConn->prepare(
+        'SELECT a.id AS id,
+                a.title AS title,
+                a.filename AS filename,
+                a.mimetype AS mimetype,
+                a.taskid AS taskid
+         FROM tblimages a
+         INNER JOIN tbltasks b
+            ON a.taskid = b.id
+         WHERE b.id = :taskid
+         AND b.userid = :userid'
+    );
+    $imageQuery->bindParam(":taskid", $taskid, PDO::PARAM_INT);
+    $imageQuery->bindParam(":userid", $returned_userid, PDO::PARAM_INT);
+    $imageQuery->execute();
+
+    $imageArrays = [];
+    while($row = $imageQuery->fetch(PDO::FETCH_ASSOC)) {
+        $image = new Image(
+            $row['id'],
+            $row['title'],
+            $row['filename'],
+            $row['mimetype'],
+            $row['taskid']
+        );
+        $imageArrays[] = $image->returnImageAsArray();
+    }
+
+    return $imageArrays;
+}
 
 try {
     $writeDB = DB::connectWriteDb();
