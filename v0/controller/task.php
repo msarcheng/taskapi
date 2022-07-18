@@ -580,12 +580,14 @@ if (array_key_exists("taskid", $_GET)) {
             $taksArray = [];
 
             while ($row = $query->fetch(PDO::FETCH_ASSOC)) {
+                $imageArray = retrieveTaskImages($readDB, $row['id'], $returned_userid);
                 $task = new Task(
                     $row['id'],
                     $row['title'],
                     $row['description'],
                     $row['deadline'],
-                    $row['completed']
+                    $row['completed'],
+                    $imageArray
                 );
                 $taskArray[] = $task->returnTaskAsArray();
             }
@@ -614,6 +616,13 @@ if (array_key_exists("taskid", $_GET)) {
             $response->setHttpStatusCode(500)
                 ->setSuccess(false)
                 ->addMessage($te->getMessage())
+                ->send();
+            exit;
+        } catch (ImageException $ie) {
+            $response = new Responses();
+            $response->setHttpStatusCode(500)
+                ->setSuccess(false)
+                ->addMessage($ie->getMessage())
                 ->send();
             exit;
         }
@@ -711,12 +720,14 @@ if (array_key_exists("taskid", $_GET)) {
             $taskArray = [];
 
             while ($row = $query->fetch(PDO::FETCH_ASSOC)) {
+                $imageArray = retrieveTaskImages($readDB, $row['id'], $returned_userid);
                 $task = new Task(
                     $row['id'],
                     $row['title'],
                     $row['description'],
                     $row['deadline'],
-                    $row['completed']
+                    $row['completed'],
+                    $imageArray
                 );
                 $taskArray[] = $task->returnTaskAsArray();
             }
@@ -751,6 +762,13 @@ if (array_key_exists("taskid", $_GET)) {
             $response->setHttpStatusCode(500)
                 ->setSuccess(false)
                 ->addMessage($te->getMessage())
+                ->send();
+            exit;
+        } catch (ImageException $ie) {
+            $response = new Responses();
+            $response->setHttpStatusCode(500)
+                ->setSuccess(false)
+                ->addMessage($ie->getMessage())
                 ->send();
             exit;
         }
@@ -788,12 +806,14 @@ if (array_key_exists("taskid", $_GET)) {
             $taksArray = [];
 
             while ($row = $query->fetch(PDO::FETCH_ASSOC)) {
+                $imageArray = retrieveTaskImages($readDB, $row['id'], $returned_userid);
                 $task = new Task(
                     $row['id'],
                     $row['title'],
                     $row['description'],
                     $row['deadline'],
-                    $row['completed']
+                    $row['completed'],
+                    $imageArray
                 );
                 $taskArray[] = $task->returnTaskAsArray();
             }
@@ -824,6 +844,8 @@ if (array_key_exists("taskid", $_GET)) {
                 ->addMessage($te->getMessage())
                 ->send();
             exit;
+        } catch (ImageException $ie) {
+            sendResponse(500, false, $ie->getMessage());
         }
     } elseif ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
