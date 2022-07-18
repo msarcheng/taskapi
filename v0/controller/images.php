@@ -491,7 +491,7 @@ function updateImageAttributesRoute($writeDB, $taskid, $imageid, $returned_useri
         $rowCount = $query->rowCount();
 
         if ($rowCount === 0) {
-            if ($writeDB->inTransction()) {
+            if ($writeDB->inTransaction()) {
                 $writeDB->rollBack();
             }
             sendResponse(404, false, "No Image Found");
@@ -561,7 +561,7 @@ function deleteImageRoute($writeDB, $taskid, $imageid, $returned_userid) {
         $rowCount = $query->rowCount();
 
         if ($rowCount === 0) {
-            if ($writeDB->inTransction()) {
+            if ($writeDB->inTransaction()) {
                 $writeDB->rollBack();
             }
             sendResponse(404, false, "No Image Found");

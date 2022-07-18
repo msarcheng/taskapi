@@ -149,7 +149,7 @@ try {
 
 if (array_key_exists("taskid", $_GET)) {
 
-    $taskid = $_GET['taskid'];
+    $taskid = $_GET['taskid'];  //GET taskid
     if ($taskid === '' || !is_numeric($taskid)) {
         $response = new Responses();
         $response->setHttpStatusCode(400)
@@ -250,11 +250,57 @@ if (array_key_exists("taskid", $_GET)) {
             sendResponse(500, false, $ie->getMessage());
         }
     } elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+
         //Delete a task
         try {
+            $imageSelectQuery = $readDB->prepare(
+                'SELECT a.id AS id,
+                        a.title AS title,
+                        a.filename AS filename,
+                        a.mimetype AS mimetype,
+                        a.taskid AS taskid
+                FROM tblimages a
+                INNER JOIN tbltasks b
+                    ON a.taskid = b.id
+                WHERE b.id = :taskid
+                AND b.userid = :userid'
+            );
+            $imageSelectQuery->bindParam(":taskid", $taskid, PDO::PARAM_INT);
+            $imageSelectQuery->bindParam(":userid", $returned_userid, PDO::PARAM_INT);
+            $imageSelectQuery->execute();
+
+            while ($imageRow = $imageSelectQuery->fetch(PDO::FETCH_ASSOC)) {
+                $writeDB->beginTransaction();
+                $image = new Image(
+                    $imageRow['id'],
+                    $imageRow['title'],
+                    $imageRow['filename'],
+                    $imageRow['mimetype'],
+                    $imageRow['taskid'],
+                );
+                $imageID = $image->getId();
+
+                $query = $writeDB->prepare(
+                    'DELETE tblimages
+                     FROM tblimages
+                     INNER JOIN tbltasks
+                      ON tblimages.taskid = tbltasks.id
+                     WHERE tblimages.id = :imageid
+                        AND tblimages.taskid = :taskid
+                        AND tbltasks.userid = :userid'
+                );
+                $query->bindParam(":imageid", $imageID, PDO::PARAM_INT);
+                $query->bindParam(":taskid", $taskid, PDO::PARAM_INT);
+                $query->bindParam(":userid", $returned_userid, PDO::PARAM_INT);
+                $query->execute();
+
+                $image->deleteImageFile();
+
+                $writeDB->commit();
+            }
+
             $query = $writeDB->prepare(
-                'DELETE
-                 FROM tbltasks
+                'DELETE FROM tbltasks
                  WHERE id = :taskid
                  AND userid = :userid'
             );
@@ -273,6 +319,13 @@ if (array_key_exists("taskid", $_GET)) {
                 exit;
             }
 
+            //After the data deletion, we need to delete the task folder also.
+            $taskImageFolder = "../../../taskimages/" . $taskid;
+
+            if (is_dir($taskImageFolder)) {
+                rmdir($taskImageFolder);    //Remove the folder if it exists
+            }
+
             //When successful
             $response = new Responses();
             $response->setHttpStatusCode(200)
@@ -280,8 +333,23 @@ if (array_key_exists("taskid", $_GET)) {
                 ->addMessage("Task deleted.")
                 ->send();
             exit;
+        } catch (ImageException $ie) {
+            if (!$writeDB->inTransaction()) {
+                $writeDB->rollBack();
+            }
+
+            $response = new Responses();
+            $response->setHttpStatusCode(500)
+                ->setSuccess(false)
+                ->addMessage($ie->getMessage())
+                ->send();
+            exit;
+
         } catch (PDOException $pe) {
-            error_log("Database error - " . $e, 0);
+            if (!$writeDB->inTransaction()) {
+                $writeDB->rollBack();
+            }
+
             $response = new Responses();
             $response->setHttpStatusCode(500)
                 ->setSuccess(false)
@@ -289,6 +357,7 @@ if (array_key_exists("taskid", $_GET)) {
                 ->send();
             exit;
         }
+
     } elseif ($_SERVER['REQUEST_METHOD'] === 'PATCH') {
         try {
 
