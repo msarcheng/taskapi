@@ -27,7 +27,7 @@ function retrieveTaskImages(
     $imageQuery->execute();
 
     $imageArrays = [];
-    while($row = $imageQuery->fetch(PDO::FETCH_ASSOC)) {
+    while ($row = $imageQuery->fetch(PDO::FETCH_ASSOC)) {
         $image = new Image(
             $row['id'],
             $row['title'],
@@ -136,7 +136,6 @@ try {
             ->send();
         exit;
     }
-
 } catch (PDOException $px) {
     $response = new Responses();
     $response->setHttpStatusCode(500)
@@ -207,12 +206,15 @@ if (array_key_exists("taskid", $_GET)) {
             }
 
             while ($row = $query->fetch(PDO::FETCH_ASSOC)) {
+                $imageArrays = retrieveTaskImages($readDB, $taskid, $returned_userid);
+
                 $task = new Task(
                     $row['id'],
                     $row['title'],
                     $row['description'],
                     $row['deadline'],
-                    $row['completed']
+                    $row['completed'],
+                    $imageArrays
                 );
                 $taskArray[] = $task->returnTaskAsArray();
             }
@@ -244,6 +246,8 @@ if (array_key_exists("taskid", $_GET)) {
                 ->addMessage($te->getMessage())
                 ->send();
             exit;
+        } catch (ImageException $ie) {
+            sendResponse(500, false, $ie->getMessage());
         }
     } elseif ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
         //Delete a task
@@ -332,7 +336,7 @@ if (array_key_exists("taskid", $_GET)) {
             }
 
             if (isset($jsonData->completed)) {
-                $completed = true;
+                $completed_updated = true;
                 $queryFields .= "completed = :completed, ";
             }
 
@@ -340,10 +344,10 @@ if (array_key_exists("taskid", $_GET)) {
 
             //Check if params are false
             if (
-                !$title_updated
-                && !$description_updated
-                && !$deadline_updated
-                && !$completed_updated
+                $title_updated === false
+                && $description_updated === false
+                && $deadline_updated === false
+                && $completed_updated === false
             ) {
                 $response = new Responses();
                 $response->setHttpStatusCode(400)
@@ -355,26 +359,22 @@ if (array_key_exists("taskid", $_GET)) {
 
             //Retrieve the updated task
             $query = $writeDB->prepare(
-                'SELECT
-                    id,
-                    title,
-                    description,
-                    DATE_FORMAT(
-                        deadline,
-                        "%d/%m/%Y %H:%i:%s"
-                    ) as deadline,
-                    completed
-                 FROM
-                    tbltasks
-                 WHERE
-                    id = :taskid
-                 AND
-                    userid = :userid'
+                'SELECT id,
+                        title,
+                        description,
+                        DATE_FORMAT(
+                            deadline,
+                            "%d/%m/%Y %H:%i:%s"
+                        ) as deadline,
+                        completed
+                 FROM tbltasks
+                 WHERE id = :taskid
+                    AND userid = :userid'
             );
             $query->bindParam(':taskid', $taskid, PDO::PARAM_INT);
             $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
-            $rowCount = $query->fetchColumn();
+            $rowCount = $query->rowCount();
 
             if ($rowCount === 0) {
                 $response = new Responses();
@@ -395,10 +395,12 @@ if (array_key_exists("taskid", $_GET)) {
                 );
             }
 
-            $queryString = "UPDATE tbltasks SET " . $queryFields . " WHERE id = :taskid AND userid = :userid";
-            $query = $writeDB->prepare($queryString);
+            // $queryString = "UPDATE tbltasks SET ".$queryFields." WHERE id = :taskid AND userid = :userid";
+            $query = $writeDB->prepare(
+                "UPDATE tbltasks SET " . $queryFields . " WHERE id = :taskid AND userid = :userid"
+            );
 
-            if ($title_updated === true) {
+            if ($title_updated == true) {
                 $task->setTitle($jsonData->title);
                 $up_title = $task->getTitle();
                 $query->bindParam(':title', $up_title, PDO::PARAM_STR);
@@ -437,7 +439,7 @@ if (array_key_exists("taskid", $_GET)) {
                 exit;
             }
 
-            $query = $readDB->prepare(
+            $query = $writeDB->prepare(
                 'SELECT
                     id,
                     title,
@@ -471,12 +473,15 @@ if (array_key_exists("taskid", $_GET)) {
             $taskArray = [];
 
             while ($row = $query->fetch(PDO::FETCH_ASSOC)) {
+
+                $imageArrays = retrieveTaskImages($writeDB, $row['id'], $returned_userid);
                 $task = new Task(
                     $row['id'],
                     $row['title'],
                     $row['description'],
                     $row['deadline'],
-                    $row['completed']
+                    $row['completed'],
+                    $imageArrays
                 );
                 $taskArray[] = $task->returnTaskAsArray();
             }
@@ -503,9 +508,16 @@ if (array_key_exists("taskid", $_GET)) {
             exit;
         } catch (TaskException $te) {
             $response = new Responses();
-            $response->setHttpStatusCode(500)
+            $response->setHttpStatusCode(400)
                 ->setSuccess(false)
                 ->addMessage($te->getMessage())
+                ->send();
+            exit;
+        } catch (ImageException $ie) {
+            $response = new Responses();
+            $response->setHttpStatusCode(500)
+                ->setSuccess(false)
+                ->addMessage($ie->getMessage())
                 ->send();
             exit;
         }
@@ -579,7 +591,7 @@ if (array_key_exists("taskid", $_GET)) {
             }
             $returnData = [];
             $returnData['rows_returned'] = $rowCount;
-            $returnData['tasks'] = $taskArray;
+            $returnData['tasks'] = $taskArray ?? ["Nothing is completed yet"];
 
             //Response
             $response = new Responses();
@@ -746,7 +758,7 @@ if (array_key_exists("taskid", $_GET)) {
         $response = new Responses();
         $response->setHttpStatusCode(405)
             ->setSuccess(false)
-            ->addMessage("Request method not allowed")
+            ->addMessage("Request method not found")
             ->send();
         exit;
     }
@@ -756,17 +768,17 @@ if (array_key_exists("taskid", $_GET)) {
         try {
             $query = $readDB->prepare(
                 'SELECT
-                    id,
-                    title,
-                    description,
-                    DATE_FORMAT(
-                        deadline,
-                        "%d/%m/%Y %H:%i:%s"
-                    ) AS deadline,
-                    completed
-                 FROM
-                    tbltasks
-                 WHERE userid = :userid'
+                        id,
+                        title,
+                        description,
+                        DATE_FORMAT(
+                            deadline,
+                            "%d/%m/%Y %H:%i:%s"
+                        ) AS deadline,
+                        completed
+                    FROM
+                        tbltasks
+                    WHERE userid = :userid'
             );
             $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
             $query->execute();
@@ -869,18 +881,18 @@ if (array_key_exists("taskid", $_GET)) {
             //Create the query.
             $query = $writeDB->prepare(
                 'INSERT INTO tbltasks
-                    (title,
-                     description,
-                     deadline,
-                     completed,
-                     userid)
-                 VALUES
-                    (:title,
-                    :description,
-                    STR_TO_DATE(:deadline, \'%d/%m/%Y %H:%i:%s\'),
-                    :completed,
-                    :userid)
-            '
+                        (title,
+                        description,
+                        deadline,
+                        completed,
+                        userid)
+                    VALUES
+                        (:title,
+                        :description,
+                        STR_TO_DATE(:deadline, \'%d/%m/%Y %H:%i:%s\'),
+                        :completed,
+                        :userid)
+                '
             );
             $query->bindParam(':title', $title, PDO::PARAM_STR);
             $query->bindParam(':description', $description, PDO::PARAM_STR);
@@ -909,16 +921,16 @@ if (array_key_exists("taskid", $_GET)) {
 
             $query = $writeDB->prepare(
                 'SELECT id,
-                        title,
-                        description,
-                        DATE_FORMAT(
-                            deadline,
-                            "%d/%m/%Y %H:%i:%s"
-                        ) AS deadline,
-                        completed
-                FROM tbltasks
-                WHERE id = :taskid
-                AND userid =:userid'
+                            title,
+                            description,
+                            DATE_FORMAT(
+                                deadline,
+                                "%d/%m/%Y %H:%i:%s"
+                            ) AS deadline,
+                            completed
+                    FROM tbltasks
+                    WHERE id = :taskid
+                    AND userid =:userid'
             );
             $query->bindParam(':taskid', $lastTaskId, PDO::PARAM_INT);
             $query->bindParam(':userid', $returned_userid, PDO::PARAM_INT);
